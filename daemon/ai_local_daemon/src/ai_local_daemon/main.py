@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 import asyncio
 import socket
 import os
+from src.ai_local_daemon.routers.healthcheck import healthcheck_router
+from src.ai_local_daemon.routers.chat import chat_router
 
 
 SOCK_DIR = f"/run/user/{os.getuid()}/ai_local_daemon"
@@ -44,5 +46,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
+# Routers
+app.include_router(healthcheck_router)
+app.include_router(chat_router)
