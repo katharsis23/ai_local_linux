@@ -26,9 +26,7 @@ class ConfigManager:
         return self.load_settings()
     
     def get_system_prompt(self) -> str:
-        return SYSTEM_PROMPT.format(
-            model=self.settings.model_name
-        )
+        return SYSTEM_PROMPT
     
     def build_prompt(self) -> str:
         # Combines the user prompt and system prompt

@@ -1,8 +1,9 @@
-# cache_manager.py
 import os
 import json
-from typing import Dict, List
-from src.ai_local_daemon.models.chat import Chat
+from typing import Dict, List, Any
+from datetime import datetime
+
+from src.ai_local_daemon.models.chat import Chat   # adjust import if needed
 
 
 class CacheManager:
@@ -12,124 +13,41 @@ class CacheManager:
 
         self.chats: Dict[str, Chat] = {}
         self.index_path = os.path.join(self.cache_dir, "index.json")
+        self._index: Dict[str, List[Dict]] = self._load_index()
 
-        self._index = self._load_index()
 
-    # -------------------------
-    # Index handling
-    # -------------------------
-
-    def _load_index(self) -> dict:
-        if not os.path.exists(self.index_path):
-            return {"chats": []}
-
-        with open(self.index_path, "r") as f:
-            return json.load(f)
-
-    def _save_index(self):
-        with open(self.index_path, "w") as f:
-            json.dump(self._index, f, indent=2)
-
-    # -------------------------
-    # Core operations
-    # -------------------------
-
-    def _chat_path(self, chat_id: str) -> str:
-        return os.path.join(self.cache_dir, f"{chat_id}.json")
-
-    def load_chat(self, chat_id: str) -> Chat:
-        if chat_id not in self.chats:
-            chat = Chat(path=self._chat_path(chat_id))
-            self.chats[chat_id] = chat
-        return self.chats[chat_id]
-
-    def create_chat(self, title: str = "New Chat") -> Chat:
-        chat = Chat(
-            path=os.path.join(self.cache_dir, f"chat_{os.urandom(4).hex()}.json"),
-            title=title
-        )
-
-        self.chats[chat.id_] = chat
-
-        self._index["chats"].append({
-            "id": chat.id_,
-            "title": chat.title,
-            "updated_at": chat.metadata["updated_at"]
-        })
-
-        self._save_index()
-        return chat
-
-    def save_chat(self, chat: Chat):
-        chat.save()
-
-        size = os.path.getsize(chat.path)
-
-        found = False
-        for c in self._index["chats"]:
-            if c["id"] == chat.id_:
-                c.update({
-                    "title": chat.title,
-                    "last_edited": chat.metadata.last_edited,
-                    "file_size": size,
-                    "message_count": chat.metadata.message_count
-                })
-                found = True
-                break
-
-        if not found:
-            self._index["chats"].append({
-                "id": chat.id_,
-                "title": chat.title,
-                "last_edited": chat.metadata.last_edited,
-                "file_size": size,
-                "message_count": chat.metadata.message_count
-            })
-
-        self._save_index()
-
-    # -------------------------
-    # Listing / selection
-    # -------------------------
-
-    def list_chats(self) -> List[dict]:
-        return sorted(
-            self._index["chats"],
-            key=lambda x: x["last_edited"],
-            reverse=True
-        )
-
-    def get_titles(self) -> List[str]:
-        return [c["title"] for c in self._index["chats"]]
-
-    # -------------------------
-    # Maintenance
-    # -------------------------
-
-    def reload(self):
-        self.chats.clear()
-        self._index = self._load_index()
-
-    def clear_all(self):
-        for file in os.listdir(self.cache_dir):
-            os.remove(os.path.join(self.cache_dir, file))
-
-        self.chats.clear()
-        self._index = {"chats": []}
-        self._save_index()
-
+    # ======================
+    # Setup
+    # ======================
     def setup(self):
-        """Initialize cache system and rebuild index if missing/corrupted"""
+        """Initialize and repair index if needed"""
         if not os.path.exists(self.index_path):
-            self._index = {"chats": []}
-            self._save_index()
+            self._rebuild_index()
             return
 
         try:
             self._index = self._load_index()
         except Exception:
-            # rebuild index if corrupted
             self._rebuild_index()
+
+    # =====================
+    # Index operations
+    # =====================
+
+    def _load_index(self) -> Dict[str, List[Dict]]:
+        if not os.path.exists(self.index_path):
+            return {"chats": []}
+        with open(self.index_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _save_index(self):
+        normalized = [
+            self._normalize_entry(c)
+            for c in self._index.get("chats", [])
+        ]
+
+        with open(self.index_path, "w", encoding="utf-8") as f:
+            json.dump({"chats": normalized}, f, indent=2, ensure_ascii=False)
 
     def _rebuild_index(self):
         chats = []
@@ -141,17 +59,25 @@ class CacheManager:
             path = os.path.join(self.cache_dir, file)
 
             try:
-                with open(path, "r") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
                 metadata = data.get("metadata", {})
 
+                last_edited = metadata.get("last_edited")
+
+                # normalize datetime
+                if isinstance(last_edited, str):
+                    last_edited_str = last_edited
+                else:
+                    last_edited_str = datetime.now().isoformat()
+
                 chats.append({
                     "id": data.get("id"),
                     "title": data.get("title"),
-                    "last_edited": metadata.get("last_edited", 0),
+                    "last_edited": last_edited_str,
                     "file_size": os.path.getsize(path),
-                    "message_count": metadata.get("message_count", 0)
+                    "message_count": metadata.get("message_count", 0),
                 })
 
             except Exception:
@@ -159,5 +85,92 @@ class CacheManager:
 
         self._index = {"chats": chats}
         self._save_index()
+    # =====================
+    # Chat operations
+    # =====================
 
-    
+    def _chat_path(self, chat_id: str) -> str:
+        # Support both "chat_xxx.json" and "xxx.json" formats
+        if not chat_id.startswith("chat_"):
+            return os.path.join(self.cache_dir, f"chat_{chat_id}.json")
+        return os.path.join(self.cache_dir, f"{chat_id}.json")
+
+    def load_chat(self, chat_id: str) -> Chat:
+        if chat_id not in self.chats:
+            chat = Chat(path=self._chat_path(chat_id))
+            self.chats[chat_id] = chat
+        return self.chats[chat_id]
+
+    def create_chat(self, title: str = "New Chat") -> Chat:
+        chat = Chat(title=title)
+        self.chats[chat.id_] = chat
+
+        # Save immediately to create file
+        chat.save()
+
+        size = os.path.getsize(chat.path)
+        chat.metadata.file_size = size
+
+        self._index["chats"].append({
+            "id": chat.id_,
+            "title": chat.title,
+            "last_edited": chat.metadata.last_edited.isoformat(),
+            "file_size": size,
+            "message_count": chat.metadata.message_count,
+        })
+
+        self._save_index()
+        return chat
+
+    def save_chat(self, chat: Chat):
+        chat.save()
+
+        size = os.path.getsize(chat.path)
+
+        # update runtime metadata
+        chat.metadata.file_size = size
+
+        entry = {
+            "id": chat.id_,
+            "title": chat.title,
+            "last_edited": chat.metadata.last_edited.isoformat(),
+            "file_size": size,
+            "message_count": chat.metadata.message_count,
+        }
+
+        for i, c in enumerate(self._index["chats"]):
+            if c.get("id") == chat.id_:
+                self._index["chats"][i] = entry
+                break
+        else:
+            self._index["chats"].append(entry)
+
+        self._save_index()
+
+    def list_chats(self) -> List[Dict]:
+        return sorted(
+            self._index["chats"],
+            key=lambda x: x.get("last_edited") or "",
+            reverse=True
+        )
+
+    def clear_all(self):
+        for file in os.listdir(self.cache_dir):
+            if file != "index.json":
+                os.remove(os.path.join(self.cache_dir, file))
+        self.chats.clear()
+        self._index = {"chats": []}
+        self._save_index()
+
+    # =================
+    # Helper
+    # =================
+
+    def _normalize_entry(self, entry: dict) -> dict:
+        return {
+            "id": entry.get("id", ""),
+            "title": entry.get("title", ""),
+            "last_edited": entry.get("last_edited") or datetime.now().isoformat(),
+            "file_size": entry.get("file_size", 0),
+            "message_count": entry.get("message_count", 0),
+        }
