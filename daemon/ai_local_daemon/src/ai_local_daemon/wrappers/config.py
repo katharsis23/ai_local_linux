@@ -1,5 +1,5 @@
 from src.ai_local_daemon.config.config import Config
-from src.ai_local_daemon.config.settings import Settings
+from src.ai_local_daemon.config.settings import Settings, SYSTEM_PROMPT
 
 
 class ConfigManager:
@@ -24,3 +24,19 @@ class ConfigManager:
     @property
     def settings(self) -> Settings:
         return self.load_settings()
+    
+    def get_system_prompt(self) -> str:
+        return SYSTEM_PROMPT.format(
+            model=self.settings.model_name
+        )
+    
+    def build_prompt(self) -> str:
+        # Combines the user prompt and system prompt
+        return f"""
+            {self.get_system_prompt()}
+
+            {self.settings.default_prompt}
+
+            User preferences:
+            {self.settings.default_prompt}
+            """

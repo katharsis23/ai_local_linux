@@ -10,6 +10,7 @@ from src.ai_local_daemon.config.config import CONFIG
 from src.ai_local_daemon.config.settings import Settings
 from logger import logger
 from src.ai_local_daemon.wrappers.config import ConfigManager
+from src.ai_local_daemon.wrappers.cache import CacheManager
 
 
 SOCK_DIR = f"/run/user/{os.getuid()}/ai_local_daemon"
@@ -21,30 +22,31 @@ async def lifespan(app: FastAPI):
     if not os.path.exists(SOCK_DIR):
         os.makedirs(SOCK_DIR, exist_ok=True, mode=0o700)
 
-    # remove stale socket
     if os.path.exists(SOCK_PATH):
         os.remove(SOCK_PATH)
 
-    # load config
     try:
+        # config
         config_manager = ConfigManager(CONFIG)
         settings = config_manager.load_settings()
 
-        # store globally in app
+        # cache
+        cache_manager = CacheManager(settings.save_chat_directory)
+        cache_manager.setup()
+
+        # store
         app.state.config_manager = config_manager
         app.state.settings = settings
+        app.state.cache_manager = cache_manager
 
-        logger.info(f"Loaded config: model={settings.model_name}")
+    except Exception as e:
+        logger.error("Startup failed", exc_info=True)
+        raise e
 
-    except Exception as config_error:
-        logger.error("Failed to load config", exc_info=True)
-        raise config_error
     yield
 
     if os.path.exists(SOCK_PATH):
         os.remove(SOCK_PATH)
-
-    os.rmdir(SOCK_DIR)
 
 app = FastAPI(
     title="AI Local Daemon",

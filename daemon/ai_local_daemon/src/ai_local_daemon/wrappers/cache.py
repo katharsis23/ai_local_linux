@@ -63,12 +63,28 @@ class CacheManager:
     def save_chat(self, chat: Chat):
         chat.save()
 
-        # update index
+        size = os.path.getsize(chat.path)
+
+        found = False
         for c in self._index["chats"]:
             if c["id"] == chat.id_:
-                c["title"] = chat.title
-                c["updated_at"] = chat.metadata["updated_at"]
+                c.update({
+                    "title": chat.title,
+                    "last_edited": chat.metadata.last_edited,
+                    "file_size": size,
+                    "message_count": chat.metadata.message_count
+                })
+                found = True
                 break
+
+        if not found:
+            self._index["chats"].append({
+                "id": chat.id_,
+                "title": chat.title,
+                "last_edited": chat.metadata.last_edited,
+                "file_size": size,
+                "message_count": chat.metadata.message_count
+            })
 
         self._save_index()
 
@@ -79,7 +95,7 @@ class CacheManager:
     def list_chats(self) -> List[dict]:
         return sorted(
             self._index["chats"],
-            key=lambda x: x["updated_at"],
+            key=lambda x: x["last_edited"],
             reverse=True
         )
 
@@ -101,3 +117,47 @@ class CacheManager:
         self.chats.clear()
         self._index = {"chats": []}
         self._save_index()
+
+    def setup(self):
+        """Initialize cache system and rebuild index if missing/corrupted"""
+        if not os.path.exists(self.index_path):
+            self._index = {"chats": []}
+            self._save_index()
+            return
+
+        try:
+            self._index = self._load_index()
+        except Exception:
+            # rebuild index if corrupted
+            self._rebuild_index()
+
+    def _rebuild_index(self):
+        chats = []
+
+        for file in os.listdir(self.cache_dir):
+            if not file.endswith(".json") or file == "index.json":
+                continue
+
+            path = os.path.join(self.cache_dir, file)
+
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+
+                metadata = data.get("metadata", {})
+
+                chats.append({
+                    "id": data.get("id"),
+                    "title": data.get("title"),
+                    "last_edited": metadata.get("last_edited", 0),
+                    "file_size": os.path.getsize(path),
+                    "message_count": metadata.get("message_count", 0)
+                })
+
+            except Exception:
+                continue
+
+        self._index = {"chats": chats}
+        self._save_index()
+
+    

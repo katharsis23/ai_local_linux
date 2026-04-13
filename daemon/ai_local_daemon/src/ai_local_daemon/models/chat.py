@@ -5,6 +5,7 @@ from typing import List, Optional
 from .message import Message
 from uuid import uuid4
 from typing_extensions import Final
+from datetime import datetime
 
 
 class Chat:
@@ -25,11 +26,15 @@ class Chat:
 
         self.title = title or self.id_
 
-        self.metadata = metadata or {
-            "created_at": time.time(),
-            "updated_at": time.time(),
-            "message_count": 0
-        }
+        from datetime import datetime
+
+        self.metadata: ChatMetadata = metadata or ChatMetadata(
+            last_edited=datetime.now(),
+            file_size=0,
+            message_count=0,
+            title=self.title,
+            id_=self.id_
+        )
 
     # Lazy load
     @property
@@ -75,3 +80,39 @@ class Chat:
     def trim(self, max_messages: int = 50):
         if len(self.messages) > max_messages:
             self._messages = self.messages[-max_messages:]
+
+
+class ChatMetadata:
+    def __init__(
+        self,
+        last_edited: datetime,
+        file_size: int,
+        message_count: int,
+        title: str,
+        id_: str,
+        **kwargs
+    ):
+        self.last_edited = last_edited
+        self.file_size = file_size
+        self.message_count = message_count
+        self.title = title
+        self.id_ = id_
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(
+            last_edited=datetime.fromisoformat(data["last_edited"]),
+            file_size=data.get("file_size", 0),
+            message_count=data.get("message_count", 0),
+            title=data.get("title", ""),
+            id_=data.get("id", "")
+        )
+
+    def to_dict(self):
+        return {
+            "last_edited": self.last_edited.isoformat(),
+            "file_size": self.file_size,
+            "message_count": self.message_count,
+            "title": self.title,
+            "id": self.id_
+        }
