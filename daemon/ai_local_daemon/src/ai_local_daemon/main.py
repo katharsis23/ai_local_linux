@@ -11,6 +11,7 @@ from src.ai_local_daemon.config.settings import Settings
 from logger import logger
 from src.ai_local_daemon.wrappers.config import ConfigManager
 from src.ai_local_daemon.wrappers.cache import CacheManager
+from fastapi.requests import Request
 
 
 SOCK_DIR = f"/run/user/{os.getuid()}/ai_local_daemon"
@@ -69,9 +70,3 @@ app.add_middleware(
 # Routers
 app.include_router(healthcheck_router)
 app.include_router(chat_router)
-
-
-# Depends functions
-
-def get_settings() -> Settings:
-    return app.state.settings

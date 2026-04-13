@@ -82,7 +82,7 @@ class Chat:
             with open(self.path, "r", encoding="utf-8") as f:
                 content = f.read().strip()
                 if not content:
-                    return []  # ✅ handle empty file
+                    return []  # handle empty file
 
                 data = json.loads(content)
         except Exception:

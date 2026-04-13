@@ -4,7 +4,7 @@ from typing import Dict, List, Any
 from datetime import datetime
 
 from src.ai_local_daemon.models.chat import Chat   # adjust import if needed
-
+from uuid import uuid4
 
 class CacheManager:
     def __init__(self, cache_dir: str):
@@ -102,12 +102,13 @@ class CacheManager:
         return self.chats[chat_id]
 
     def create_chat(self, title: str = "New Chat") -> Chat:
-        chat = Chat(title=title)
+        chat_id = uuid4().hex
+        path = os.path.join(self.cache_dir, f"chat_{chat_id}.json")
+
+        chat = Chat(path=path, title=title)
         self.chats[chat.id_] = chat
 
-        # Save immediately to create file
         chat.save()
-
         size = os.path.getsize(chat.path)
         chat.metadata.file_size = size
 
