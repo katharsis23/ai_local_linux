@@ -6,7 +6,7 @@ from src.ai_local_daemon.wrappers.config import ConfigManager
 def test_config_loads(config_manager):
     settings = config_manager.load_settings()
 
-    assert settings.model_name == "llama3"
+    assert settings.model_name == "gpt3"
     assert settings.temperature == 0.5
 
     assert "chats" in settings.save_chat_directory

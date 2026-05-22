@@ -3,68 +3,44 @@ from typing import List, Optional
 from logger import logger
 from src.ai_local_daemon.wrappers.cache import CacheManager
 import src.ai_local_daemon.schemas.chat as chat_schemas
-from src.ai_local_daemon.dependency import get_cache_manager
+from src.ai_local_daemon.config.settings import Settings
+from src.ai_local_daemon.internal.tool_calling import DirectoryManager, FileManager
+from src.ai_local_daemon.internal.agent import Agent
 from fastapi.responses import JSONResponse
+from src.ai_local_daemon.wrappers.config import ConfigManager
+import src.ai_local_daemon.dependency as dependencies
 
 
 chat_router = APIRouter(prefix="/chat", tags=["chat"])
 
+
 @chat_router.post("/prompt/")
 async def post_prompt(
     prompt: str = Form(...),
-    files: Optional[List[UploadFile]] = File(default=None),
+    settings: Settings = Depends(dependencies.get_settings),
+    directory_manager: DirectoryManager = Depends(dependencies.get_directory_manager),
+    file_manager: FileManager = Depends(dependencies.get_file_manager),
+    config_manager: ConfigManager = Depends(dependencies.get_config_manager),
 ):
-    try:
-        file_blocks = []
+    agent = Agent(
+        config_manager=config_manager,
+        file_manager=file_manager,
+        directory_manager=directory_manager
+    )
 
-        if files:
-            for f in files:
-                content = await f.read()
+    response = await agent.run(prompt)
 
-                # for now assume text files
-                text = content.decode("utf-8", errors="ignore")
-
-                file_blocks.append(
-                    f"\n--- FILE: {f.filename} ---\n{text}\n"
-                )
-
-        full_prompt = prompt + "\n" + "\n".join(file_blocks)
-
-        # TODO: Send settings in a separate file
-        import httpx
-
-        OLLAMA_URL = "http://localhost:11434/api/generate"
-
-        async with httpx.AsyncClient(timeout=None) as client:
-            res = await client.post(
-                OLLAMA_URL,
-                json={
-                    "model": "llama3",
-                    "prompt": full_prompt,
-                    "stream": False
-                },
-            )
-
-        data = res.json()
-        return {
-            "response": data["response"],
-            "files_received": len(files or [])
-        }
-
-    except Exception as error:
-        logger.error("Prompt failed", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(error),
-        )
+    return {
+        "response": response,
+    }
 
 
 @chat_router.get("/list", response_model=List[chat_schemas.ChatMetaResponse])
-async def list_chats(cache: CacheManager = Depends(get_cache_manager)):
+async def list_chats(cache: CacheManager = Depends(dependencies.get_cache_manager)):
     try:
         return JSONResponse(
             content={
-                "chats": [chat.to_dict() for chat in cache.list_chats()]
+                "chats": cache.list_chats()
             },
             status_code=status.HTTP_200_OK
         )
@@ -79,7 +55,7 @@ async def list_chats(cache: CacheManager = Depends(get_cache_manager)):
 @chat_router.get("/{chat_id}", response_model=chat_schemas.ChatResponse)
 async def load_chat(
     chat_id: str,                                   # ← better name
-    cache: CacheManager = Depends(get_cache_manager)
+    cache: CacheManager = Depends(dependencies.get_cache_manager)
 ):
     """Load a chat by its ID"""
     try:
@@ -97,7 +73,8 @@ async def load_chat(
             detail=f"Failed to load chat: {str(error)}"
         )
 
+
 @chat_router.post("/create")
-async def create_chat(request: chat_schemas.CreateChatRequest,cache: CacheManager = Depends(get_cache_manager)):
+async def create_chat(request: chat_schemas.CreateChatRequest, cache: CacheManager = Depends(dependencies.get_cache_manager)):
     chat = cache.create_chat(request.title)
     return {"id": chat.id_}

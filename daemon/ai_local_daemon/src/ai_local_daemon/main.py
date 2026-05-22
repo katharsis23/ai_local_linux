@@ -6,13 +6,15 @@ from contextlib import asynccontextmanager
 import os
 from src.ai_local_daemon.routers.healthcheck import healthcheck_router
 from src.ai_local_daemon.routers.chat import chat_router
+from src.ai_local_daemon.routers.human_request import human_request_router
 from src.ai_local_daemon.config.config import CONFIG
 from src.ai_local_daemon.config.settings import Settings
 from logger import logger
 from src.ai_local_daemon.wrappers.config import ConfigManager
 from src.ai_local_daemon.wrappers.cache import CacheManager
 from fastapi.requests import Request
-
+from src.ai_local_daemon.internal.approval import ApprovalManager
+from src.ai_local_daemon.internal.tool_calling import DirectoryManager, FileManager
 
 SOCK_DIR = f"/run/user/{os.getuid()}/ai_local_daemon"
 SOCK_PATH = f"{SOCK_DIR}/app.sock"
@@ -35,10 +37,23 @@ async def lifespan(app: FastAPI):
         cache_manager = CacheManager(settings.save_chat_directory)
         cache_manager.setup()
 
+        # approval
+        approval_manager = ApprovalManager()
+        file_manager = FileManager(
+            settings=settings,
+            approval_manager=approval_manager                           
+        )
+        directory_manager = DirectoryManager(
+            settings=settings,
+            approval_manager=approval_manager
+        )
         # store
         app.state.config_manager = config_manager
         app.state.settings = settings
         app.state.cache_manager = cache_manager
+        app.state.approval_manager = approval_manager
+        app.state.directory_manager = directory_manager
+        app.state.file_manager = file_manager
 
     except Exception as e:
         logger.error("Startup failed", exc_info=True)
@@ -70,3 +85,4 @@ app.add_middleware(
 # Routers
 app.include_router(healthcheck_router)
 app.include_router(chat_router)
+app.include_router(human_request_router)

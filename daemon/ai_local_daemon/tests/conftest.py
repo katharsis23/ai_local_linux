@@ -17,15 +17,23 @@ def temp_dir(tmp_path: Path):
 
 @pytest.fixture
 def config_manager(temp_dir):
-    """Mocked config manager with temp config file"""
     config_path = temp_dir / "settings.json"
 
-    # create minimal config file
-    config_path.write_text("""{
-      "model_name": "llama3",
-      "temperature": 0.5,
-      "save_chat_directory": "%s"
-    }""" % (temp_dir / "chats"))
+    data = {
+        "model_name": "gpt3",
+        "temperature": 0.5,
+        "save_chat_directory": str(temp_dir / "chats"),
+        "default_prompt": "You are a helpful local AI assistant.",
+        "white_list_directories": ["~/projects"],
+        "black_list_directories": ["/etc", "/root"],
+        "white_list_commands": ["ls", "cat", "echo", "cd", "pwd", "whoami"],
+        "max_file_size": 200000,
+        "max_files": 20,
+    }
+
+    import json
+    with open(config_path, "w") as f:
+        json.dump(data, f)
 
     config = Config()
     config.set_settings_file_path(str(config_path))
