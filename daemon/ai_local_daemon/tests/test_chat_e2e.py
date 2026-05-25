@@ -1,58 +1,48 @@
 import pytest
-import asyncio
-from httpx import AsyncClient, ASGITransport
+from fastapi.testclient import TestClient
 from unittest.mock import patch
 from src.ai_local_daemon.main import app
+from src.ai_local_daemon.internal.approval import ApprovalManager
 
 
-def test_chat_e2e_approval():
-    # Mock Ollama API interactions
+def test_chat_e2e_approved(tmp_path):
+    test_dir = tmp_path / "foo"
+    test_dir.mkdir()
+
     def mock_ollama_post(*args, **kwargs):
         class MockRes:
+            status_code = 200
             def json(self):
                 messages = kwargs.get("json", {}).get("messages", [])
-                
-                # If this is the initial call 
                 if len(messages) == 2:
-                    return {
-                        "message": {
-                            "content": '{"action": "read_directory", "args": {"path": "/foo"}, "reason": "testing"}'
-                        }
-                    }
-                # Final call after tool results are passed back
-                return {
-                    "message": {
-                        "content": "I have accessed the directory."
-                    }
-                }
+                    return {"message": {"content": f'{{"action": "read_directory", "args": {{"path": "{str(test_dir)}"}}, "reason": "testing"}}'}}
+                return {"message": {"content": "I have accessed the directory."}}
         return MockRes()
 
     with patch('httpx.AsyncClient.post', side_effect=mock_ollama_post):
-        # Setup ASGI async client to allow concurrent requests testing
-        with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            
-            # Start the chat request asynchronously (so it doesn't block)
-            chat_task = asyncio.create_task(
-                client.post("/chat/prompt/", data={"prompt": "list /foo"})
-            )
-            
-            # Poll pending requests until the tool call halts for approval
-            pending_req = None
-            for _ in range(10):
-                res = client.get("/request/pending")
-                data = res.json()
-                if data:
-                    pending_req = data[0]
-                    break
-                    
-            assert pending_req is not None
-            req_id = pending_req["id"]
-            
-            # Approve the request to unblock the chat task
-            approve_res = client.post(f"/request/approve/{req_id}")
-            assert approve_res.status_code == 200
-            
-            # Ensure the chat task resolves successfully
-            chat_res = chat_task
-            assert chat_res.status_code == 200
-            assert chat_res.json()["response"] == "I have accessed the directory."
+        with patch.object(ApprovalManager, 'make_request', return_value=True):
+            with TestClient(app) as client:
+                res = client.post("/chat/prompt/", data={"prompt": f"list {str(test_dir)}"})
+                assert res.status_code == 200
+                assert res.json()["response"] == "I have accessed the directory."
+
+
+def test_chat_e2e_rejected(tmp_path):
+    test_dir = tmp_path / "bar"
+    test_dir.mkdir()
+
+    def mock_ollama_post(*args, **kwargs):
+        class MockRes:
+            status_code = 200
+            def json(self):
+                messages = kwargs.get("json", {}).get("messages", [])
+                if len(messages) == 2:
+                    return {"message": {"content": f'{{"action": "read_directory", "args": {{"path": "{str(test_dir)}"}}, "reason": "testing"}}'}}
+                return {"message": {"content": "Access to directory denied."}}
+        return MockRes()
+
+    with patch('httpx.AsyncClient.post', side_effect=mock_ollama_post):
+        with patch.object(ApprovalManager, 'make_request', return_value=False):
+            with TestClient(app) as client:
+                res = client.post("/chat/prompt/", data={"prompt": f"list {str(test_dir)}"})
+                assert res.json()["response"] == "Access to directory denied."

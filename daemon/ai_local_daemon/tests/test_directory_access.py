@@ -8,8 +8,14 @@ from logger import logger
 
 
 @pytest.fixture
-def file_manager(config_manager):
-    return FileManager(config_manager.settings)
+def approval_manager():
+    from src.ai_local_daemon.internal.approval import ApprovalManager
+    return ApprovalManager()
+
+
+@pytest.fixture
+def file_manager(config_manager, approval_manager):
+    return FileManager(config_manager.settings, approval_manager)
 
 
 def test_restricted_access(file_manager):
@@ -60,7 +66,7 @@ def test_file_too_large(file_manager, tmp_path):
         raise ValueError("File too large")
 
     with patch(
-        "src.ai_local_daemon.tool_calling.FileManager._read_file",
+        "src.ai_local_daemon.internal.tool_calling.FileManager._read_file",
         fake_read_file
     ):
         with pytest.raises(ValueError):
