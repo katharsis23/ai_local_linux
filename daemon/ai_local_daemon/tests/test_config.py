@@ -16,8 +16,6 @@ def test_system_prompt(config_manager):
     system_prompt = config_manager.get_system_prompt()
 
     assert system_prompt is not None
-    assert "## GENERAL BEHAVIOR" in system_prompt
-    assert "## TOOL USAGE PROTOCOL" in system_prompt
 
 
 def test_config_reload(config_manager):

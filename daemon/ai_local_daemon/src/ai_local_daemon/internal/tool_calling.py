@@ -180,3 +180,14 @@ class DirectoryManager:
         )
 
         return approved
+
+
+class CommandManager:
+    def __init__(
+        self,
+        approvalManager: ApprovalManager(),
+        settings: Settings
+    ):
+        self.settings = settings
+        self.approval_manager = approvalManager
+
