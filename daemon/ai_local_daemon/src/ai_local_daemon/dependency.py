@@ -8,8 +8,8 @@ from src.ai_local_daemon.internal.tool_calling import (
     DirectoryManager, FileManager
 )
 
-# Depends functions
 
+# Depends functions
 def get_settings(request: Request) -> Settings:
     return request.app.state.settings
 
