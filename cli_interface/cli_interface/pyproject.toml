@@ -1,0 +1,51 @@
+[project]
+name = "cli-interface"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "katharsis23",email = "daniklv2006@gmail.com"}
+]
+readme = "README.md"
+requires-python = "^3.13"
+dependencies = [
+    "textual (>=8.2.7,<9.0.0)",
+    "httpx[uds] (>=0.28.1,<0.29.0)",
+    "asyncio (>=4.0.0,<5.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "cli_interface", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.15.10,<0.16.0)",
+    "invoke (>=3.0.3,<4.0.0)",
+    "logger (>=1.4,<2.0)",
+    "pytest (>=9.0.3,<10.0.0)"
+]
+
+# Config for ruff
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+    "F401",
+    "E501",
+]
+
+exclude = [
+    "__pycache__",
+    "venv",
+    ".venv",
+    ".ruff_cache",
+    ".ruff_cache/*",
+    ".pytest_cache",
+    ".pytest_cache/*"
+]

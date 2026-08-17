@@ -36,23 +36,9 @@ async def ping_router():
 async def pending_requests(
     manager: ApprovalManager = Depends(get_approval_manager),
 ):
-    print("1")
-
-    await asyncio.sleep(0)
-
-    print("2")
-
     queue = manager.notification_queue
-
-    print("3", queue)
-
     coro = queue.get()
-
-    print("4", coro)
-
-    result = await asyncio.wait_for(coro, timeout=3)
-
-    print("5")
+    result = await asyncio.wait_for(coro, timeout=650)
 
     return result
 
